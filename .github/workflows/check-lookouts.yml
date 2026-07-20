@@ -1,1 +1,20 @@
+name: Check Lookouts McDouble Deal
 
+on:
+  schedule:
+    # Runs at 12:00 PM UTC = 7:00/8:00 AM Eastern (adjust for DST as desired)
+    - cron: "0 12 * * *"
+  workflow_dispatch: {}  # lets you trigger it manually from the Actions tab to test
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests
+      - run: python check_lookouts.py
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
