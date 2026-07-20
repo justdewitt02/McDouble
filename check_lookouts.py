@@ -2,18 +2,18 @@
 Checks whether the Chattanooga Lookouts hit a double in their most recent
 HOME game (checked the day after), and sends a push notification via
 ntfy.sh if they did -- meaning it's a $1 McDouble day.
-
+ 
 Runs for free on a schedule via GitHub Actions (see .github/workflows/).
 """
 import datetime
 import os
 import sys
 import requests
-
+ 
 STATS_API = "https://statsapi.mlb.com/api/v1"
 NTFY_TOPIC = os.environ.get("NTFY_TOPIC")  # set as a GitHub Actions secret
-
-
+ 
+ 
 def find_team_id():
     """Find the Lookouts' team ID for the Double-A sport (sportId=12)."""
     resp = requests.get(f"{STATS_API}/teams", params={"sportId": 12, "activeStatus": "Y"})
@@ -22,8 +22,8 @@ def find_team_id():
         if "Chattanooga" in team.get("name", ""):
             return team["id"], team["name"]
     raise RuntimeError("Could not find Chattanooga Lookouts in team list")
-
-
+ 
+ 
 def get_recent_home_games(team_id, days_back=2):
     """Get completed home games in the last `days_back` days."""
     today = datetime.date.today()
@@ -47,8 +47,8 @@ def get_recent_home_games(team_id, days_back=2):
             ):
                 games.append(game)
     return games
-
-
+ 
+ 
 def game_had_double(game_pk, team_id):
     """Check the boxscore for whether the home team hit any doubles."""
     resp = requests.get(f"{STATS_API}/game/{game_pk}/boxscore")
@@ -59,28 +59,32 @@ def game_had_double(game_pk, team_id):
         return False, 0
     doubles = home_team["teamStats"]["batting"].get("doubles", 0)
     return doubles > 0, doubles
-
-
+ 
+ 
 def send_notification(title, message):
     if not NTFY_TOPIC:
         print("NTFY_TOPIC not set -- skipping push, printing instead.")
         print(title, "-", message)
         return
+    # HTTP headers must be latin-1; encode any emoji/unicode as UTF-8 bytes
+    # then decode as latin-1 so requests can transmit them (ntfy decodes
+    # header values back as UTF-8 on its end).
+    safe_title = title.encode("utf-8").decode("latin-1")
     requests.post(
         f"https://ntfy.sh/{NTFY_TOPIC}",
         data=message.encode("utf-8"),
-        headers={"Title": title, "Priority": "high", "Tags": "baseball,hamburger"},
+        headers={"Title": safe_title, "Priority": "high", "Tags": "baseball,hamburger"},
     )
-
-
+ 
+ 
 def main():
     team_id, team_name = find_team_id()
     games = get_recent_home_games(team_id)
-
+ 
     if not games:
         print(f"No recent completed home games found for {team_name}.")
         return
-
+ 
     any_double = False
     for game in games:
         had_double, count = game_had_double(game["gamePk"], team_id)
@@ -95,11 +99,11 @@ def main():
             )
         else:
             print(f"{game_date}: no doubles at home.")
-
+ 
     if not any_double:
         print("No doubles in recent home games -- no McDouble deal today.")
-
-
+ 
+ 
 if __name__ == "__main__":
     try:
         main()
